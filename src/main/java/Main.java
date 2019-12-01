@@ -21,28 +21,29 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class Main {
+
     private static HashMap<String, List<String>> mappingComponent = new HashMap<>();
-    private static final String PROJECT_PATH = "";
-    private static final String TESTS_PATH = PROJECT_PATH + "";
-    private static final String MAPPING_EXCEL_SHEET = "";
-    private static final String MAPPING_EXCEL_FILE_PATH = "C:\\Users\\Yauheni_Papovich1\\Downloads\\Regression_RC_5_Summary (3).xlsx";
+    private static String projectPath = "D:\\g2-e2e-test";
 
     public static void main(String[] args) throws IOException {
+        String testsPath = projectPath + "\\src\\main\\java\\com\\mscs\\emr\\test\\functional\\g2\\test\\";
+        String mappingExcelFilePath = "C:\\Users\\Yauheni_Papovich1\\Documents\\G2_TF_vs_Automated_TCs - Copy.xlsx";
+
         List<String> codeFilePaths = new ArrayList<>();
 
-        try (Stream<Path> walk = Files.walk(Paths.get(TESTS_PATH))) {
+        try (Stream<Path> walk = Files.walk(Paths.get(testsPath))) {
             codeFilePaths.addAll(walk.map(Path::toString).filter(f -> f.endsWith(".java")).collect(Collectors.toList()));
 
         } catch (IOException e) {
             e.printStackTrace();
         }
 
-        readMappingExcelFile(MAPPING_EXCEL_FILE_PATH);
+        readMappingExcelFile(mappingExcelFilePath);
         Set<String> components = mappingComponent.keySet();
         for (String codeFilePath : codeFilePaths) {
             for (String component : components) {
                 for (String classPath : mappingComponent.get(component)) {
-                    if (codeFilePath.replace("\\", ".").replace(".java", "").endsWith(classPath)) {
+                    if (codeFilePath.equals(testsPath + classPath)) {
                         replaceText(codeFilePath, component);
                     }
                 }
@@ -55,7 +56,7 @@ public class Main {
     private static void readMappingExcelFile(String mappingExcelFilePath) throws IOException {
         Workbook workbook = WorkbookFactory.create(new File(mappingExcelFilePath));
 
-        Sheet sheet = workbook.getSheet(MAPPING_EXCEL_SHEET);
+        Sheet sheet = workbook.getSheet("Sheet2");
 
         for (Row row : sheet) {
             String componentName = row.getCell(0).getStringCellValue();
@@ -82,12 +83,19 @@ public class Main {
     private static void replaceText(String file, String componentGroup) {
         try {
             String classContent = getFileContent(file);
-            String regExp = "groups.=.\\{(.*?)}";
+            String regExp = "(groups.=.\\{)(.*?)}";
             String groups = getMatcherGroupContent(regExp, classContent, 1);
-            String groupsWithComponent = String.format("TestGroup.%s, %s", componentGroup, groups);
-            classContent = classContent.replace(groups, Matcher.quoteReplacement(groupsWithComponent));
+            String groupsWithComponent = String.format("TestGroup.%s", componentGroup);
+            String newClassContent = classContent.replace(groups, Matcher.quoteReplacement(groups + groupsWithComponent + ", "));
 
-            writeFileContent(file, classContent);
+            Pattern pattern = Pattern.compile(regExp, Pattern.DOTALL | Pattern.CASE_INSENSITIVE);
+            Matcher matcher = pattern.matcher(newClassContent);
+            while (matcher.find()) {
+                String group = matcher.group(2);
+                newClassContent = newClassContent.replaceAll(group, group.replaceAll("  ", " "));
+            }
+
+            writeFileContent(file, newClassContent);
         } catch (IOException ioe) {
             ioe.printStackTrace();
         }
@@ -95,7 +103,7 @@ public class Main {
 
     private static void updateTestGroupsClass(Set<String> components) {
         try {
-            String testGroupsClassPath = PROJECT_PATH + "\\src\\main\\java\\com\\mscs\\emr\\test\\utils\\TestGroup.java";
+            String testGroupsClassPath = projectPath + "\\src\\main\\java\\com\\mscs\\emr\\test\\utils\\TestGroup.java";
             String classContent = getFileContent(testGroupsClassPath);
             String regExp = "TestGroup.\\{(.*?)}";
             String groupsVariables = getMatcherGroupContent(regExp, classContent, 1);
